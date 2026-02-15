@@ -1,0 +1,15 @@
+[package]
+name = "dotiam-web"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+dotiam-core = { path = "../dotiam-core" }
+dotiam-app = { path = "../dotiam-app" }
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+askama = { version = "0.12" }
+askama_axum = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
+tower-http = { version = "0.6", features = ["fs"] }

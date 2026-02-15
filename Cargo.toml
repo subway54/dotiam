@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "dotiam-core",
+    "dotiam-app",
+    "dotiam-web",
+]
+resolver = "2"

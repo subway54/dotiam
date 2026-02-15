@@ -1,0 +1,16 @@
+tiles:
+  0,7:
+    tile_type: Ruins
+    discovered: true
+  1,0:
+    tile_type: Ruins
+    discovered: false
+  0,1:
+    tile_type: Forest
+    discovered: false
+  0,4:
+    tile_type: Forest
+    discovered: true
+  0,0:
+    tile_type: Plains
+    discovered: true

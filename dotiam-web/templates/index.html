@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dotiam</title>
+    <script src="https://unpkg.com/htmx.org@2.0.0"></script>
+    <style>
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            padding: 0;
+            margin: 0;
+            background: #0a0a0a;
+            color: #00ff00;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #game-container {
+            width: 800px;
+            max-width: 95vw;
+            height: 90vh;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #333;
+            background: #111;
+        }
+        #image-area {
+            width: 100%;
+            aspect-ratio: 21 / 9;
+            background: #222;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-bottom: 1px solid #333;
+            position: relative;
+        }
+        #image-area .placeholder {
+            color: #444;
+            font-size: 1.2em;
+        }
+        #description-area {
+            padding: 20px;
+            border-bottom: 1px solid #333;
+            background: #151515;
+            flex-shrink: 0;
+        }
+        #history-area {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #333;
+            background: #0d0d0d;
+            scroll-behavior: smooth;
+        }
+        #input-area {
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            background: #0a0a0a;
+        }
+        #input-area span {
+            margin-right: 10px;
+        }
+        #command-input {
+            background: transparent;
+            border: none;
+            color: #00ff00;
+            font-family: inherit;
+            font-size: 1em;
+            flex-grow: 1;
+            outline: none;
+        }
+        .message { margin-bottom: 10px; }
+        .scene-description { color: #aaa; margin-bottom: 15px; }
+    </style>
+</head>
+<body>
+    <div id="game-container" id="game-ui">
+        {% include "partial_game.html" %}
+    </div>
+    <script>
+        // Fokus na input po každém načtení (HTMX)
+        document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+            // Ignorujeme požadavky na našeptávač, abychom nemazali rozepsaný text
+            if (evt.detail.pathInfo.requestPath.includes('/suggest')) {
+                return;
+            }
+
+            const input = document.getElementById('command-input');
+            if (input) {
+                input.focus();
+                input.value = '';
+            }
+            // Scroll dolů v history-area
+            const historyArea = document.getElementById('history-area');
+            if (historyArea) {
+                historyArea.scrollTop = historyArea.scrollHeight;
+            }
+        });
+    </script>
+</body>
+</html>
