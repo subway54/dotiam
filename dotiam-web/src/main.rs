@@ -6,7 +6,7 @@ use axum::{
     Form, Router,
 };
 use dotiam_app::Repository;
-use dotiam_core::{GameState, WorldTemplate, TileType};
+use dotiam_core::{GameState, WorldTemplate, TileType, Position, MAP_SIZE, Tile};
 use serde::Deserialize;
 use sqlx::sqlite::SqlitePool;
 use std::sync::Arc;
@@ -61,6 +61,43 @@ struct SuggestionsTemplate {
     suggestions: Vec<String>,
 }
 
+struct EditorTile {
+    char: char,
+    x: i32,
+    y: i32,
+    is_active: bool,
+    exists: bool,
+}
+
+#[derive(Template)]
+#[template(path = "editor.html")]
+struct EditorTemplate {
+    run_id: String,
+    grid: Vec<Vec<EditorTile>>,
+    pos: Position,
+    tile: Option<dotiam_core::Tile>,
+}
+
+#[derive(Template)]
+#[template(path = "partial_editor_details.html")]
+struct EditorDetailTemplate {
+    run_id: String,
+    pos: Position,
+    tile: Option<dotiam_core::Tile>,
+}
+
+#[derive(Deserialize)]
+struct UpdateDescriptionInput {
+    description: String,
+    tile_type: String,
+}
+
+#[derive(Deserialize)]
+struct EditorQuery {
+    x: Option<i32>,
+    y: Option<i32>,
+}
+
 struct AppError(String);
 
 impl IntoResponse for AppError {
@@ -99,6 +136,11 @@ async fn main() {
         .route("/game/{id}/suggest", get(suggest_handler))
         .route("/game/{id}/edit_tile", post(edit_tile_handler))
         .route("/game/{id}/export", get(export_handler))
+        .route("/game/{id}/editor", get(editor_handler))
+        .route("/game/{id}/editor/tile/{x}/{y}", get(editor_tile_handler))
+        .route("/game/{id}/editor/tile/{x}/{y}/description", post(update_description_handler))
+        .route("/game/{id}/editor/tile/{x}/{y}/quick_update", post(quick_update_handler))
+        .route("/game/{id}/editor/undo", post(editor_undo_handler))
         .with_state(app_state);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
@@ -188,6 +230,7 @@ async fn edit_tile_handler(
             dotiam_core::Tile {
                 tile_type,
                 discovered: true,
+                description: None,
             },
         );
     }
@@ -234,4 +277,185 @@ async fn suggest_handler(
 
     let template = SuggestionsTemplate { suggestions };
     Ok(Html(template.render().map_err(|e| AppError(e.to_string()))?))
+}
+
+async fn editor_handler(
+    Path(id): Path<String>,
+    Query(query): Query<EditorQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Html<String>, AppError> {
+    let game_state = state.repo.load_run(&id).await?;
+    let mut x = query.x.unwrap_or(game_state.player.pos.x);
+    let mut y = query.y.unwrap_or(game_state.player.pos.y);
+
+    // Clamp values to MAP_SIZE
+    x = x.clamp(0, MAP_SIZE - 1);
+    y = y.clamp(0, MAP_SIZE - 1);
+
+    let cursor_pos = Position { x, y };
+
+    // Viewport size
+    let vp_size = 10; // 10 cells in each direction -> 21x21 total
+    let min_x = (x - vp_size).max(0);
+    let max_x = (x + vp_size).min(MAP_SIZE - 1);
+    let min_y = (y - vp_size).max(0);
+    let max_y = (y + vp_size).min(MAP_SIZE - 1);
+
+    let mut grid = Vec::new();
+    for curr_y in (min_y..=max_y).rev() {
+        let mut row = Vec::new();
+        for curr_x in min_x..=max_x {
+            let pos = Position { x: curr_x, y: curr_y };
+            let tile = game_state.world.tiles.get(&pos);
+            let char = match tile {
+                Some(t) => match t.tile_type {
+                    dotiam_core::TileType::HorizontalPath => '-',
+                    dotiam_core::TileType::VerticalPath => '|',
+                    dotiam_core::TileType::Crossroad => '+',
+                    dotiam_core::TileType::Plains | dotiam_core::TileType::Forest | dotiam_core::TileType::Ruins | dotiam_core::TileType::Cave => '+',
+                },
+                None => ' ',
+            };
+            row.push(EditorTile {
+                char,
+                x: curr_x,
+                y: curr_y,
+                is_active: curr_x == cursor_pos.x && curr_y == cursor_pos.y,
+                exists: tile.is_some(),
+            });
+        }
+        grid.push(row);
+    }
+
+    let tile = game_state.world.tiles.get(&cursor_pos).cloned();
+
+    let template = EditorTemplate {
+        run_id: id,
+        grid,
+        pos: cursor_pos,
+        tile,
+    };
+    Ok(Html(template.render().map_err(|e| AppError(e.to_string()))?))
+}
+
+async fn editor_tile_handler(
+    Path((id, x, y)): Path<(String, i32, i32)>,
+    State(state): State<Arc<AppState>>,
+) -> Result<Html<String>, AppError> {
+    let game_state = state.repo.load_run(&id).await?;
+    let pos = Position { x, y };
+    let tile = game_state.world.tiles.get(&pos).cloned();
+
+    let template = EditorDetailTemplate {
+        run_id: id,
+        pos,
+        tile,
+    };
+    Ok(Html(template.render().map_err(|e| AppError(e.to_string()))?))
+}
+
+async fn update_description_handler(
+    Path((id, x, y)): Path<(String, i32, i32)>,
+    State(state): State<Arc<AppState>>,
+    Form(input): Form<UpdateDescriptionInput>,
+) -> Result<Html<String>, AppError> {
+    let mut game_state = state.repo.load_run(&id).await?;
+    let pos = Position { x, y };
+
+    let tile_type = match input.tile_type.as_str() {
+        "Forest" => TileType::Forest,
+        "Ruins" => TileType::Ruins,
+        "Cave" => TileType::Cave,
+        "Plains" => TileType::Plains,
+        "HorizontalPath" => TileType::HorizontalPath,
+        "VerticalPath" => TileType::VerticalPath,
+        "Crossroad" => TileType::Crossroad,
+        _ => return Err(AppError("Invalid tile type".to_string())),
+    };
+    
+    let description = if input.description.trim().is_empty() {
+        None
+    } else {
+        Some(input.description)
+    };
+
+    if let Some(tile) = game_state.world.tiles.get_mut(&pos) {
+        tile.tile_type = tile_type;
+        tile.description = description;
+    } else {
+        game_state.world.tiles.insert(pos.clone(), dotiam_core::Tile {
+            tile_type,
+            discovered: true,
+            description,
+        });
+    }
+
+    state.repo.save_run(&id, &game_state).await?;
+
+    let tile = game_state.world.tiles.get(&pos).cloned();
+    let template = EditorDetailTemplate {
+        run_id: id,
+        pos,
+        tile,
+    };
+    Ok(Html(template.render().map_err(|e| AppError(e.to_string()))?))
+}
+
+async fn quick_update_handler(
+    Path((id, x, y)): Path<(String, i32, i32)>,
+    State(state): State<Arc<AppState>>,
+    Form(input): Form<EditTileInput>,
+) -> Result<StatusCode, AppError> {
+    let mut game_state = state.repo.load_run(&id).await?;
+    let pos = Position { x, y };
+
+    // Uložit současný svět do historie před změnou
+    game_state.history.push(game_state.world.clone());
+    // Omezit historii na 50 kroků
+    if game_state.history.len() > 50 {
+        game_state.history.remove(0);
+    }
+
+    if input.tile_type == "Empty" {
+        game_state.world.tiles.remove(&pos);
+    } else {
+        let tile_type = match input.tile_type.as_str() {
+            "Forest" => TileType::Forest,
+            "Ruins" => TileType::Ruins,
+            "Cave" => TileType::Cave,
+            "Plains" => TileType::Plains,
+            "HorizontalPath" => TileType::HorizontalPath,
+            "VerticalPath" => TileType::VerticalPath,
+            "Crossroad" => TileType::Crossroad,
+            _ => return Err(AppError("Invalid tile type".to_string())),
+        };
+
+        if let Some(tile) = game_state.world.tiles.get_mut(&pos) {
+            tile.tile_type = tile_type;
+        } else {
+            game_state.world.tiles.insert(pos, Tile {
+                tile_type,
+                discovered: true,
+                description: None,
+            });
+        }
+    }
+
+    state.repo.save_run(&id, &game_state).await?;
+    Ok(StatusCode::OK)
+}
+
+async fn editor_undo_handler(
+    Path(id): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<StatusCode, AppError> {
+    let mut game_state = state.repo.load_run(&id).await?;
+    
+    if let Some(previous_world) = game_state.history.pop() {
+        game_state.world = previous_world;
+        state.repo.save_run(&id, &game_state).await?;
+        Ok(StatusCode::OK)
+    } else {
+        Ok(StatusCode::NO_CONTENT)
+    }
 }

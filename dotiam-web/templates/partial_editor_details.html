@@ -1,0 +1,32 @@
+<h3>Tile at ({{ pos.x }}, {{ pos.y }})</h3>
+
+<div id="image-preview">
+    {% match tile %}
+        {% when Some(t) %}
+            [ IMAGE ]
+        {% when None %}
+            [ NO TILE ]
+    {% endmatch %}
+</div>
+
+<form hx-post="/game/{{ run_id }}/editor/tile/{{ pos.x }}/{{ pos.y }}/description" hx-target="#editor-pane">
+    <div style="margin-bottom: 10px;">
+        <label>Type:</label>
+        <select name="tile_type" style="background: #222; color: #00ff00; border: 1px solid #333; font-family: inherit; width: 100%;">
+            <option value="Plains" {% match tile %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Plains %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Plains (+)</option>
+            <option value="Forest" {% match tile %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Forest %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Forest (+)</option>
+            <option value="Ruins" {% match tile %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Ruins %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Ruins (+)</option>
+            <option value="Cave" {% match tile %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Cave %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Cave (+)</option>
+            <option value="HorizontalPath" {% match tile %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::HorizontalPath %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Horizontal Path (-)</option>
+            <option value="VerticalPath" {% match tile %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::VerticalPath %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Vertical Path (|)</option>
+            <option value="Crossroad" {% match tile %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Crossroad %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Crossroad (+)</option>
+        </select>
+    </div>
+    <label>Description:</label>
+    <textarea name="description">{% match tile %}{% when Some(t) %}{% match t.description %}{% when Some(d) %}{{ d }}{% when None %}{% endmatch %}{% when None %}{% endmatch %}</textarea>
+    <button type="submit" class="btn" style="margin-top: 10px; width: 100%;">[ SAVE CHANGES ]</button>
+</form>
+
+{% if tile.is_none() %}
+<p style="color: #666; font-size: 0.8em;">Note: Saving description will create a new Plains tile at this position.</p>
+{% endif %}

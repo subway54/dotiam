@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize, Serializer, Deserializer};
 use std::collections::HashMap;
 
+pub const MAP_SIZE: i32 = 255;
+pub const START_POS: i32 = 127;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Position {
     pub x: i32,
@@ -90,18 +93,76 @@ pub enum TileType {
     Ruins,
     Cave,
     Plains,
+    HorizontalPath, // -
+    VerticalPath,   // |
+    Crossroad,      // +
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Tile {
     pub tile_type: TileType,
     pub discovered: bool,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct World {
     #[serde(serialize_with = "serialize_position_map", deserialize_with = "deserialize_position_map")]
     pub tiles: HashMap<Position, Tile>,
+}
+
+impl World {
+    pub fn get_bounding_box(&self) -> (i32, i32, i32, i32) {
+        if self.tiles.is_empty() {
+            return (0, 0, 0, 0);
+        }
+
+        let mut min_x = i32::MAX;
+        let mut max_x = i32::MIN;
+        let mut min_y = i32::MAX;
+        let mut max_y = i32::MIN;
+
+        for pos in self.tiles.keys() {
+            min_x = min_x.min(pos.x);
+            max_x = max_x.max(pos.x);
+            min_y = min_y.min(pos.y);
+            max_y = max_y.max(pos.y);
+        }
+        (min_x, max_x, min_y, max_y)
+    }
+
+    pub fn get_ascii_map(&self) -> String {
+        if self.tiles.is_empty() {
+            return "Empty World".to_string();
+        }
+
+        let (min_x, max_x, min_y, max_y) = self.get_bounding_box();
+        
+        // Přidáme malý padding
+        let min_x = min_x - 1;
+        let max_x = max_x + 1;
+        let min_y = min_y - 1;
+        let max_y = max_y + 1;
+
+        let mut output = String::new();
+        for y in (min_y..=max_y).rev() {
+            for x in min_x..=max_x {
+                let pos = Position { x, y };
+                let char = match self.tiles.get(&pos) {
+                    Some(tile) => match tile.tile_type {
+                        TileType::HorizontalPath => '-',
+                        TileType::VerticalPath => '|',
+                        TileType::Crossroad => '+',
+                        TileType::Plains | TileType::Forest | TileType::Ruins | TileType::Cave => '+',
+                    },
+                    None => ' ',
+                };
+                output.push(char);
+            }
+            output.push('\n');
+        }
+        output
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +199,7 @@ pub struct GameState {
     pub world: World,
     pub turn: u32,
     pub log: Vec<String>,
+    pub history: Vec<World>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,35 +223,54 @@ impl GameState {
             tiles: HashMap::new(),
         };
         // Základní "mapa" pro testování
-        world.tiles.insert(Position { x: 0, y: 0 }, Tile { tile_type: TileType::Plains, discovered: true });
-        world.tiles.insert(Position { x: 0, y: 1 }, Tile { tile_type: TileType::Forest, discovered: false });
-        world.tiles.insert(Position { x: 1, y: 0 }, Tile { tile_type: TileType::Ruins, discovered: false });
+        world.tiles.insert(Position { x: START_POS, y: START_POS }, Tile { tile_type: TileType::Plains, discovered: true, description: None });
+        world.tiles.insert(Position { x: START_POS, y: START_POS + 1 }, Tile { tile_type: TileType::Forest, discovered: false, description: None });
+        world.tiles.insert(Position { x: START_POS + 1, y: START_POS }, Tile { tile_type: TileType::Ruins, discovered: false, description: None });
 
-        Self::new_with_world(player_name, world)
-    }
-
-    pub fn new_with_world(player_name: String, world: World) -> Self {
         Self {
             player: Player {
                 name: player_name.clone(),
-                pos: Position { x: 0, y: 0 },
+                pos: Position { x: START_POS, y: START_POS },
                 hp: 100,
                 max_hp: 100,
             },
             world,
             turn: 0,
             log: vec![format!("Welcome to the world of Dotiam, {}!", player_name)],
+            history: Vec::new(),
+        }
+    }
+
+    pub fn new_with_world(player_name: String, world: World) -> Self {
+        Self {
+            player: Player {
+                name: player_name.clone(),
+                pos: Position { x: START_POS, y: START_POS },
+                hp: 100,
+                max_hp: 100,
+            },
+            world,
+            turn: 0,
+            log: vec![format!("Welcome to the world of Dotiam, {}!", player_name)],
+            history: Vec::new(),
         }
     }
 
     pub fn get_current_description(&self) -> String {
         match self.world.tiles.get(&self.player.pos) {
-            Some(tile) => match tile.tile_type {
-                TileType::Plains => "You are standing on a vast plain. The wind plays with the blades of grass.".to_string(),
-                TileType::Forest => "You are surrounded by a dense, dark forest. You hear branches snapping.".to_string(),
-                TileType::Ruins => "You are in the midst of ancient ruins. The stones tell forgotten stories.".to_string(),
-                TileType::Cave => "You are in a cold cave. Water drips from the ceiling.".to_string(),
-            },
+            Some(tile) => {
+                if let Some(ref desc) = tile.description {
+                    desc.clone()
+                } else {
+                    match tile.tile_type {
+                        TileType::Plains => "You are standing on a vast plain. The wind plays with the blades of grass.".to_string(),
+                        TileType::Forest => "You are surrounded by a dense, dark forest. You hear branches snapping.".to_string(),
+                        TileType::Ruins => "You are in the midst of ancient ruins. The stones tell forgotten stories.".to_string(),
+                        TileType::Cave => "You are in a cold cave. Water drips from the ceiling.".to_string(),
+                        TileType::HorizontalPath | TileType::VerticalPath | TileType::Crossroad => "You are on a path.".to_string(),
+                    }
+                }
+            }
             None => "You are in an unknown wasteland.".to_string(),
         }
     }
@@ -253,7 +334,7 @@ mod tests {
     fn test_move_player() {
         let mut state = GameState::new("Player1".to_string());
         state.apply_action(GameAction::Move(Direction::North));
-        assert_eq!(state.player.pos, Position { x: 0, y: 1 });
+        assert_eq!(state.player.pos, Position { x: START_POS, y: START_POS + 1 });
         assert_eq!(state.turn, 1);
     }
 
@@ -268,14 +349,14 @@ mod tests {
         assert_eq!(state.player.pos, deserialized.player.pos);
         
         // Check if one of the tiles is correctly preserved
-        let pos = Position { x: 0, y: 0 };
+        let pos = Position { x: START_POS, y: START_POS };
         assert!(deserialized.world.tiles.contains_key(&pos));
     }
 
     #[test]
     fn test_world_template_yaml() {
         let mut world = World { tiles: HashMap::new() };
-        world.tiles.insert(Position { x: 5, y: 10 }, Tile { tile_type: TileType::Cave, discovered: true });
+        world.tiles.insert(Position { x: 5, y: 10 }, Tile { tile_type: TileType::Cave, discovered: true, description: Some("A dark cave".to_string()) });
         
         let template = WorldTemplate::from_world(&world);
         let yaml = template.to_yaml();
@@ -284,6 +365,8 @@ mod tests {
         assert_eq!(deserialized.tiles.len(), 1);
         let pos = Position { x: 5, y: 10 };
         assert!(deserialized.tiles.contains_key(&pos));
-        assert!(matches!(deserialized.tiles.get(&pos).unwrap().tile_type, TileType::Cave));
+        let tile = deserialized.tiles.get(&pos).unwrap();
+        assert!(matches!(tile.tile_type, TileType::Cave));
+        assert_eq!(tile.description.as_deref(), Some("A dark cave"));
     }
 }
