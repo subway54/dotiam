@@ -1,3 +1,49 @@
+# PLAN_06.2: Implementace Mystické lesní adventury
+
+Tento plán popisuje kroky pro implementaci nové úrovně "Whispering Woods" podle návrhu v Zadání 6.2 v `README_06.md`.
+
+## 1. Cíle
+- **Vytvoření herního světa:** Implementace 8 unikátních uzlů (lokací) s propojením podle grafu.
+- **Implementace předmětů:** Přidání 9 předmětů s popisy a vlastnostmi.
+- **Logika kombinací:** Definování 2 klíčových kombinací (pochodeň, lektvar).
+- **Nastavení podmínek:** Implementace zamčených cest vyžadujících předměty nebo kombinace.
+- **Lokalizace:** Celá úroveň bude v angličtině podle Zadání 6.1 a 6.2.
+
+## 2. Technické kroky
+
+### A. Definice Uzlů (Nodes) v `world.yaml`
+1.  **Forest Crossroads (start):** Výchozí bod, obsahuje `flint`. Propojení na `bridge`, `forgotten_path`, `hut_exterior`.
+2.  **Stone Bridge:** Spojka k hradu, obsahuje `dry_wood`.
+3.  **Forgotten Path:** Cesta k jeskyni, obsahuje `wild_herbs`.
+4.  **Hut Exterior:** Vstup k chatrči, zamčeno podmínkou `!HasItem iron_key`.
+5.  **Hut Interior:** Alchymistická dílna, obsahuje `cauldron` a `empty_bottle`.
+6.  **Echoing Cave:** Temná jeskyně, vstup vyžaduje `!HasItem torch`. Obsahuje `iron_key`.
+7.  **Castle Gate:** Hradní brána, zamčena magickou bariérou, vyžaduje `!HasItem purifying_potion`.
+8.  **Castle Keep:** Cíl hry, obsahuje `artifact`.
+
+### B. Definice Předmětů (Items)
+- `flint`: Základní materiál.
+- `dry_wood`: Základní materiál.
+- `torch`: Výsledek kombinace `flint` + `dry_wood`.
+- `wild_herbs`: Surovina pro lektvar.
+- `iron_key`: Klíč k chatrči.
+- `cauldron`: Nástroj pro vaření lektvaru.
+- `empty_bottle`: Nádoba (možná pro budoucí rozšíření, v návrhu 6.2 je součástí lokace).
+- `purifying_potion`: Výsledek kombinace `wild_herbs` + `cauldron`.
+- `artifact`: Cílový předmět.
+
+### C. Definice Kombinací (Combinations)
+1.  `flint` + `dry_wood` = `torch` (umožňuje vstup do jeskyně).
+2.  `wild_herbs` + `cauldron` = `purifying_potion` (umožňuje vstup do hradu).
+
+### D. Ověření a Integrace
+1.  Aktualizace souboru `world.yaml` s novým obsahem.
+2.  Spuštění testů `cargo test -p dotiam-core` pro ověření správné deserializace YAML a základní logiky.
+3.  Ruční ověření průchodnosti (logický průchod: Crossroads -> Bridge -> Craft Torch -> Cave -> Key -> Hut -> Craft Potion -> Gate -> Keep).
+
+## 3. Návrh YAML souboru (z README_06.md)
+
+```yaml
 nodes:
   start:
     id: start
@@ -149,3 +195,10 @@ combinations:
   - item1: wild_herbs
     item2: cauldron
     result: purifying_potion
+```
+
+## 4. Akceptační kritéria
+- `world.yaml` obsahuje všechny lokace, předměty a kombinace z návrhu.
+- Hra je hratelná od začátku do konce bez záseků (softlocků).
+- Všechny podmínky (`conditions`) u hran odpovídají hernímu postupu.
+- Testy v `dotiam-core` procházejí.

@@ -587,4 +587,73 @@ combinations: []
             _ => panic!("Expected HasItem condition"),
         }
     }
+
+    #[test]
+    fn test_whispering_woods_walkthrough() {
+        let content = std::fs::read_to_string("../world.yaml").expect("Failed to read world.yaml");
+        let template = WorldTemplate::from_yaml(&content).expect("Failed to parse world.yaml");
+        let mut state = GameState::new_with_world("Hero".to_string(), template.to_world());
+
+        // 1. Start at the Forest Crossroads. Pick up the flint.
+        assert_eq!(state.player.current_node, "start");
+        state.apply_action(GameAction::Pickup("flint".to_string()));
+        assert!(state.player.inventory.contains(&"flint".to_string()));
+
+        // 2. Go to the Stone Bridge and pick up the dry_wood.
+        state.apply_action(GameAction::Move("bridge".to_string()));
+        assert_eq!(state.player.current_node, "bridge");
+        state.apply_action(GameAction::Pickup("dry_wood".to_string()));
+        assert!(state.player.inventory.contains(&"dry_wood".to_string()));
+
+        // 3. Combine flint and dry_wood to create a torch.
+        state.apply_action(GameAction::Combine("flint".to_string(), "dry_wood".to_string()));
+        assert!(state.player.inventory.contains(&"torch".to_string()));
+        assert!(!state.player.inventory.contains(&"flint".to_string()));
+        assert!(!state.player.inventory.contains(&"dry_wood".to_string()));
+
+        // 4. Go to the Forgotten Path, pick up wild_herbs, and use the torch to enter the Echoing Cave.
+        state.apply_action(GameAction::Move("start".to_string()));
+        state.apply_action(GameAction::Move("forgotten_path".to_string()));
+        assert_eq!(state.player.current_node, "forgotten_path");
+        state.apply_action(GameAction::Pickup("wild_herbs".to_string()));
+        assert!(state.player.inventory.contains(&"wild_herbs".to_string()));
+
+        state.apply_action(GameAction::Move("cave".to_string()));
+        assert_eq!(state.player.current_node, "cave");
+
+        // 5. Find the iron_key inside the cave.
+        state.apply_action(GameAction::Pickup("iron_key".to_string()));
+        assert!(state.player.inventory.contains(&"iron_key".to_string()));
+
+        // 6. Go to the Hut Exterior and use the iron_key to enter the Hut Interior.
+        state.apply_action(GameAction::Move("forgotten_path".to_string()));
+        state.apply_action(GameAction::Move("start".to_string()));
+        state.apply_action(GameAction::Move("hut_exterior".to_string()));
+        assert_eq!(state.player.current_node, "hut_exterior");
+        
+        state.apply_action(GameAction::Move("hut_interior".to_string()));
+        assert_eq!(state.player.current_node, "hut_interior");
+
+        // 7. Pick up the cauldron and combine it with wild_herbs to brew the purifying_potion.
+        state.apply_action(GameAction::Pickup("cauldron".to_string()));
+        assert!(state.player.inventory.contains(&"cauldron".to_string()));
+        
+        state.apply_action(GameAction::Combine("wild_herbs".to_string(), "cauldron".to_string()));
+        assert!(state.player.inventory.contains(&"purifying_potion".to_string()));
+
+        // 8. Travel through the Stone Bridge to the Castle Gate.
+        state.apply_action(GameAction::Move("hut_exterior".to_string()));
+        state.apply_action(GameAction::Move("start".to_string()));
+        state.apply_action(GameAction::Move("bridge".to_string()));
+        state.apply_action(GameAction::Move("castle_gate".to_string()));
+        assert_eq!(state.player.current_node, "castle_gate");
+
+        // 9. Use the purifying_potion to break the seal and enter the Castle Keep.
+        state.apply_action(GameAction::Move("castle_keep".to_string()));
+        assert_eq!(state.player.current_node, "castle_keep");
+
+        // 10. Retrieve the artifact and lift the curse.
+        state.apply_action(GameAction::Pickup("artifact".to_string()));
+        assert!(state.player.inventory.contains(&"artifact".to_string()));
+    }
 }
