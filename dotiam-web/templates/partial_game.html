@@ -1,6 +1,6 @@
 <div id="image-area">
     <div class="placeholder">
-        [ SCENE IMAGE ({{ state.player.pos.x }}, {{ state.player.pos.y }}) ]
+        [ SCENE IMAGE ({{ state.player.current_node }}) ]
     </div>
 </div>
 
@@ -8,25 +8,58 @@
     <div class="scene-description">
         {{ state.get_current_description() }}
         <br>
-        <small>Position: ({{ state.player.pos.x }}, {{ state.player.pos.y }}), Turn: {{ state.turn }}</small>
+        <small>Node: {{ state.player.current_node }}, Turn: {{ state.turn }}</small>
+    </div>
+
+    {% if let Some(node) = state.world.nodes.get(state.player.current_node.as_str()) %}
+    {% if !node.items.is_empty() %}
+    <div class="items-here" style="margin-top: 10px; color: #aaa;">
+        <strong>Items here:</strong> 
+        {% for item_id in node.items %}
+            {% if let Some(item) = state.world.items.get(item_id.as_str()) %}
+                <span title="{{ item.description }}">{{ item.name }}</span>{% if !loop.last %}, {% endif %}
+            {% else %}
+                {{ item_id }}{% if !loop.last %}, {% endif %}
+            {% endif %}
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <div class="inventory-area" style="margin-top: 10px; color: #88ccff;">
+        <strong>Inventory:</strong>
+        {% if state.player.inventory.is_empty() %}
+            Empty
+        {% else %}
+            {% for item_id in state.player.inventory %}
+                {% if let Some(item) = state.world.items.get(item_id.as_str()) %}
+                    <span title="{{ item.description }}">{{ item.name }}</span>{% if !loop.last %}, {% endif %}
+                {% else %}
+                    {{ item_id }}{% if !loop.last %}, {% endif %}
+                {% endif %}
+            {% endfor %}
+        {% endif %}
     </div>
     
-    <div id="ui-controls" style="margin-top: 10px; display: flex; gap: 10px;">
-        {% if edit_mode %}
-        <a href="/game/{{ run_id }}?edit=false" hx-get="/game/{{ run_id }}?edit=false" hx-target="#game-container" hx-push-url="true" style="color: #ff0000; text-decoration: none; border: 1px solid #ff0000; padding: 2px 5px;">[ EXIT EDIT MODE ]</a>
-        <form hx-post="/game/{{ run_id }}/edit_tile" hx-target="#game-container" style="display: inline;">
-            <select name="tile_type" onchange="this.form.requestSubmit()" style="background: #222; color: #00ff00; border: 1px solid #333; font-family: inherit;">
-                <option value="Plains" {% match state.world.tiles.get(state.player.pos) %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Plains %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Plains</option>
-                <option value="Forest" {% match state.world.tiles.get(state.player.pos) %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Forest %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Forest</option>
-                <option value="Ruins" {% match state.world.tiles.get(state.player.pos) %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Ruins %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Ruins</option>
-                <option value="Cave" {% match state.world.tiles.get(state.player.pos) %}{% when Some(t) %}{% match t.tile_type %}{% when dotiam_core::TileType::Cave %}selected{% else %}{% endmatch %}{% when None %}{% endmatch %}>Cave</option>
-            </select>
-        </form>
-        {% else %}
-        <a href="/game/{{ run_id }}?edit=true" hx-get="/game/{{ run_id }}?edit=true" hx-target="#game-container" hx-push-url="true" style="color: #888; text-decoration: none; border: 1px solid #444; padding: 2px 5px;">[ EDIT MODE ]</a>
+    <div id="ui-controls" style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 10px;">
+        {% if let Some(node) = state.world.nodes.get(state.player.current_node.as_str()) %}
+            {% for edge in node.edges %}
+                {% if state.can_traverse(edge) %}
+                <button hx-post="/game/{{ run_id }}/command" 
+                        hx-vals='{"command": "{{ edge.target_id }}"}'
+                        hx-target="#game-container"
+                        style="background: #222; color: #00ff00; border: 1px solid #444; padding: 5px 10px; cursor: pointer;">
+                    {{ edge.label }}
+                </button>
+                {% else %}
+                <button disabled
+                        style="background: #111; color: #444; border: 1px solid #222; padding: 5px 10px; cursor: not-allowed;">
+                    {{ edge.label }} (Locked)
+                </button>
+                {% endif %}
+            {% endfor %}
         {% endif %}
-        <a href="/game/{{ run_id }}/export" target="_blank" style="color: #888; text-decoration: none; border: 1px solid #444; padding: 2px 5px;">[ EXPORT YAML ]</a>
-        <a href="/game/{{ run_id }}/editor" style="color: #00ff00; text-decoration: none; border: 1px solid #00ff00; padding: 2px 5px;">[ ASCII EDITOR ]</a>
+        <a href="/game/{{ run_id }}/export" target="_blank" style="color: #888; text-decoration: none; border: 1px solid #444; padding: 5px 10px;">[ EXPORT YAML ]</a>
     </div>
 </div>
 
@@ -38,7 +71,7 @@
     </div>
 </div>
 
-<form id="input-area" hx-post="/game/{{ run_id }}/command{% if edit_mode %}?edit=true{% endif %}" hx-target="#game-container" hx-swap="innerHTML">
+<form id="input-area" hx-post="/game/{{ run_id }}/command" hx-target="#game-container" hx-swap="innerHTML">
     <span>&gt;</span>
     <input type="text" 
            id="command-input" 
@@ -46,8 +79,8 @@
            autofocus 
            autocomplete="off"
            list="suggestions"
-           placeholder="Type a command..."
-           hx-get="/game/{{ run_id }}/suggest{% if edit_mode %}?edit=true{% endif %}"
+           placeholder="Type a command or click a button..."
+           hx-get="/game/{{ run_id }}/suggest"
            hx-trigger="input changed delay:100ms"
            hx-target="#suggestions">
     <datalist id="suggestions">

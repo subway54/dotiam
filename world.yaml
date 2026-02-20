@@ -1,16 +1,60 @@
-tiles:
-  0,7:
-    tile_type: Ruins
-    discovered: true
-  1,0:
-    tile_type: Ruins
-    discovered: false
-  0,1:
-    tile_type: Forest
-    discovered: false
-  0,4:
-    tile_type: Forest
-    discovered: true
-  0,0:
-    tile_type: Plains
-    discovered: true
+nodes:
+  start:
+    id: start
+    description: "You are standing in a small clearing. The sun is shining through the trees."
+    attributes: {}
+    edges:
+      - target_id: forest
+        label: "Go into the forest"
+        conditions: []
+    items:
+      - stick
+  forest:
+    id: forest
+    description: "You are in a dense forest. It's much darker here."
+    attributes: {}
+    edges:
+      - target_id: start
+        label: "Return to the clearing"
+        conditions: []
+      - target_id: cave
+        label: "Enter the dark cave"
+        conditions:
+          - !HasItem torch
+    items:
+      - stone
+  cave:
+    id: cave
+    description: "You are inside a cool, damp cave. A mysterious chest sits in the corner."
+    attributes: {}
+    edges:
+      - target_id: forest
+        label: "Exit the cave"
+        conditions: []
+    items:
+      - treasure
+items:
+  stick:
+    id: stick
+    name: "Wooden Stick"
+    description: "A sturdy-looking branch."
+    can_pickup: true
+  stone:
+    id: stone
+    name: "Sharp Stone"
+    description: "A piece of flint with sharp edges."
+    can_pickup: true
+  torch:
+    id: torch
+    name: "Makeshift Torch"
+    description: "A stick with a stone tied to it... somehow it's burning."
+    can_pickup: true
+  treasure:
+    id: treasure
+    name: "Golden Idol"
+    description: "A heavy, golden statue. You are rich!"
+    can_pickup: true
+combinations:
+  - item1: stick
+    item2: stone
+    result: torch

@@ -32,3 +32,17 @@ Pomocí následujících kláves bude modifikována pozice na které je kurzor.
 * ' ' - smazání pozice
 * 'z' - zpět původní hodnota
 
+# Zadání 04.3
+
+Změna mapy. Nově bude fungovat takto:
+
+* '.' - planina ()
+* '^' - hory (neprůchozí)
+* '~' - voda
+* 'S' - start
+* 'G' - brána
+* '#' - zeď
+
+Uprav taky patřičně ovládání editoru.
+Pozice kde není pouze prázdný znak bude mít
+světleší barvu než černá jako podkladovou - tmavě šedá.
